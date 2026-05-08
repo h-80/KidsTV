@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Alfaham Box - Absolute Stream</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; overflow: hidden; }
+        body, html { background: black; width: 100%; height: 100%; }
+        .player-container { width: 100vw; height: 100vh; background: black; position: relative; }
+        #player { width: 100%; height: 100%; pointer-events: none; }
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; background: transparent; }
+    </style>
+</head>
+<body>
+
+    <div class="player-container">
+        <div id="player"></div>
+        <div class="overlay"></div>
+    </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+
+    <script>
+        const rawLinks = `
+            https://www.youtube.com/watch?v=uLPJIuevODY
+            https://www.youtube.com/watch?v=7tPRhJzVjeM
+            https://www.youtube.com/watch?v=bppulSQPyzw
+            https://www.youtube.com/watch?v=l68FyQK3R6A
+            https://www.youtube.com/watch?v=jYUGkXcgwrE
+            https://www.youtube.com/watch?v=xGWOkqnTdcA
+            https://www.youtube.com/watch?v=_58wFJsS5yo
+            https://www.youtube.com/watch?v=lYG67YTgfCA
+            https://www.youtube.com/watch?v=Z2p9NrNDnRY
+            https://www.youtube.com/watch?v=YYRMNvJKlE8
+            https://www.youtube.com/watch?v=t0Q2otsqC4I
+            https://www.youtube.com/watch?v=zeBDGkvkgro
+            https://www.youtube.com/watch?v=L0BlF04a-MI
+            https://www.youtube.com/watch?v=ZooIBL5z-s8
+            https://www.youtube.com/watch?v=mBorcJ2Mvx0
+            https://www.youtube.com/watch?v=kQMi1q0V7wA
+            https://www.youtube.com/watch?v=yiFHpQ-mSCM
+            https://www.youtube.com/watch?v=ZFkVwZO0Y-A
+        `;
+
+        const videoIDs = rawLinks.trim().split(/\s+/).map(url => {
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : null;
+        }).filter(id => id !== null);
+
+        // مدة كل فيديو (300 ثانية)
+        const playlist = videoIDs.map(id => ({ id: id, duration: 300 }));
+
+        // --- التثبيت المرجعي للأبد ---
+        // تم تثبيت البداية بتاريخ 8 مايو 2026 الساعة 12 منتصف الليل
+        const ABSOLUTE_START = new Date(2026, 4, 8, 0, 0, 0).getTime(); 
+
+        let player;
+
+        function onYouTubeIframeAPIReady() {
+            syncStream();
+        }
+
+        function syncStream() {
+            const now = Date.now();
+            const totalPlaylistTime = playlist.reduce((acc, v) => acc + v.duration, 0);
+            
+            // حساب الثواني الكلية التي مرت منذ 8/5/2026 وحتى هذه اللحظة (حتى لو بعد سنة)
+            let totalElapsedSeconds = Math.floor((now - ABSOLUTE_START) / 1000);
+            
+            // إذا كان المستخدم قد فتح الصفحة قبل التاريخ المذكور (لحماية الكود)
+            if (totalElapsedSeconds < 0) totalElapsedSeconds = 0;
+
+            // حساب الموقع الحالي داخل الدورة المستمرة
+            const currentCyclePos = totalElapsedSeconds % totalPlaylistTime;
+
+            let timeSum = 0;
+            let targetIdx = 0;
+            let seekTime = 0;
+
+            for (let i = 0; i < playlist.length; i++) {
+                if (currentCyclePos < timeSum + playlist[i].duration) {
+                    targetIdx = i;
+                    seekTime = currentCyclePos - timeSum;
+                    break;
+                }
+                timeSum += playlist[i].duration;
+            }
+
+            loadVideo(playlist[targetIdx].id, seekTime);
+        }
+
+        function loadVideo(vidId, startTime) {
+            if (player && player.loadVideoById) {
+                player.loadVideoById({ videoId: vidId, startSeconds: startTime });
+            } else {
+                player = new YT.Player('player', {
+                    videoId: vidId,
+                    playerVars: { 
+                        'autoplay': 1, 'start': startTime, 'controls': 0, 
+                        'rel': 0, 'iv_load_policy': 3, 'modestbranding': 1, 'disablekb': 1 
+                    },
+                    events: {
+                        'onStateChange': (e) => { if(e.data === YT.PlayerState.ENDED) syncStream(); },
+                        'onError': () => syncStream()
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+</html>
