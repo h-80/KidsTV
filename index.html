@@ -3,20 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kids TV - Absolute Stream</title>
+    <title>Kids TV</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; overflow: hidden; }
-        body, html { background: black; width: 100%; height: 100%; }
-        .player-container { width: 100vw; height: 100vh; background: black; position: relative; }
-        #player { width: 100%; height: 100%; pointer-events: none; }
-        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; background: transparent; }
+        /* إزالة أي هوامش أو فراغات */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body, html { 
+            width: 100%; 
+            height: 100%; 
+            background: black; 
+            overflow: hidden; 
+        }
+
+        .player-container { 
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw; 
+            height: 100vh; 
+            background: black; 
+        }
+
+        #player { 
+            width: 100%; 
+            height: 100%; 
+            border: none;
+        }
+        /* تم حذف الـ overlay والـ touch-layer نهائياً */
     </style>
 </head>
 <body>
 
     <div class="player-container">
         <div id="player"></div>
-        <div class="overlay"></div>
     </div>
 
     <script src="https://www.youtube.com/iframe_api"></script>
@@ -49,13 +68,12 @@
             return (match && match[2].length === 11) ? match[2] : null;
         }).filter(id => id !== null);
 
-        // مدة كل فيديو (300 ثانية)
-        const playlist = videoIDs.map(id => ({ id: id, duration: 300 }));
+        const playlist = videoIDs.map((id, index) => {
+            return { id: id, duration: (index === 0) ? 182 : 300 };
+        });
 
-        // --- التثبيت المرجعي للأبد ---
-        // تم تثبيت البداية بتاريخ 8 مايو 2026 الساعة 12 منتصف الليل
-        const ABSOLUTE_START = new Date(2026, 4, 8, 0, 0, 0).getTime(); 
-
+        // المرجع الثابت: 8 مايو 2026
+        const FIXED_EPOCH = new Date(2026, 4, 8, 0, 0, 0).getTime();
         let player;
 
         function onYouTubeIframeAPIReady() {
@@ -63,31 +81,24 @@
         }
 
         function syncStream() {
-            const now = Date.now();
+            const currentTime = Date.now();
             const totalPlaylistTime = playlist.reduce((acc, v) => acc + v.duration, 0);
-            
-            // حساب الثواني الكلية التي مرت منذ 8/5/2026 وحتى هذه اللحظة (حتى لو بعد سنة)
-            let totalElapsedSeconds = Math.floor((now - ABSOLUTE_START) / 1000);
-            
-            // إذا كان المستخدم قد فتح الصفحة قبل التاريخ المذكور (لحماية الكود)
-            if (totalElapsedSeconds < 0) totalElapsedSeconds = 0;
+            let totalElapsed = Math.floor((currentTime - FIXED_EPOCH) / 1000);
+            if (totalElapsed < 0) totalElapsed = 0;
 
-            // حساب الموقع الحالي داخل الدورة المستمرة
-            const currentCyclePos = totalElapsedSeconds % totalPlaylistTime;
-
+            const currentPos = totalElapsed % totalPlaylistTime;
             let timeSum = 0;
             let targetIdx = 0;
             let seekTime = 0;
 
             for (let i = 0; i < playlist.length; i++) {
-                if (currentCyclePos < timeSum + playlist[i].duration) {
+                if (currentPos < timeSum + playlist[i].duration) {
                     targetIdx = i;
-                    seekTime = currentCyclePos - timeSum;
+                    seekTime = currentPos - timeSum;
                     break;
                 }
                 timeSum += playlist[i].duration;
             }
-
             loadVideo(playlist[targetIdx].id, seekTime);
         }
 
@@ -98,8 +109,12 @@
                 player = new YT.Player('player', {
                     videoId: vidId,
                     playerVars: { 
-                        'autoplay': 1, 'start': startTime, 'controls': 0, 
-                        'rel': 0, 'iv_load_policy': 3, 'modestbranding': 1, 'disablekb': 1 
+                        'autoplay': 1, 
+                        'start': startTime, 
+                        'controls': 1, 
+                        'rel': 0, 
+                        'playsinline': 1,
+                        'modestbranding': 1
                     },
                     events: {
                         'onStateChange': (e) => { if(e.data === YT.PlayerState.ENDED) syncStream(); },
